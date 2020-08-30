@@ -1,8 +1,6 @@
-use bytebuffer::*;
 mod w3grs {
-    use super::*;
+    use bytebuffer::*;
     use flate2::read::ZlibDecoder;
-    use std::env;
     use std::fs;
     use std::io::Read;
     use std::str;
@@ -11,6 +9,9 @@ mod w3grs {
         pub header: Header,
         pub subheader: Subheader,
         pub metadata: MapMetadata,
+        pub slot_records: Vec<SlotRecord>,
+        pub player_records: Vec<PlayerRecord>,
+        pub reforged_player_records: Vec<ReforgedPlayerRecord>,
     }
     pub struct Header {
         compressed_size: i32,
@@ -32,12 +33,22 @@ mod w3grs {
         content: Vec<u8>,
     }
 
-    struct PlayerRecord {
+    pub struct SlotRecord {
+        team_id: u8,
+        player_id: u8,
+        color: u8,
+        race_flag: u8,
+        ai_strength: u8,
+        handicap_flag: u8,
+        status: u8,
+    }
+
+    pub struct PlayerRecord {
         id: i8,
         name: String,
     }
 
-    struct ReforgedPlayerRecord {
+    pub struct ReforgedPlayerRecord {
         id: u8,
         name: String,
         clan: String,
@@ -51,6 +62,13 @@ mod w3grs {
         pub map_explored: bool,
         pub hide_terrain: bool,
         pub always_visible: bool,
+        pub speed: u8,
+        pub creator: String,
+        pub observer_mode: u8,
+        pub full_shared_unit_control: bool,
+        pub referees: bool,
+        pub fixed_teams: bool,
+        pub default_visibility: bool,
     }
 
     fn decode_game_meta_data(data: Vec<u8>) -> Vec<u8> {
@@ -166,7 +184,7 @@ mod w3grs {
         let hide_terrain = a.read_bit().unwrap();
         a.read_bit().unwrap();
 
-        let fixed_teams = a.read_bits(2).unwrap();
+        let fixed_teams = a.read_bits(2).unwrap() == 3;
         a.read_bits(6).unwrap();
 
         a.read_bit().unwrap();
@@ -181,13 +199,20 @@ mod w3grs {
         let map = read_zero_terminated(&mut a);
         let creator = read_zero_terminated(&mut a);
         return MapMetadata {
+            speed,
+            observer_mode: observer_mode as u8,
+            creator,
             map: map,
-            random_hero: random_hero,
+            random_hero,
             random_races: random_races,
             map_explored: map_explored,
             hide_terrain: hide_terrain,
             always_visible: always_visible,
             teams_together: teams_together,
+            full_shared_unit_control,
+            referees,
+            fixed_teams,
+            default_visibility: default,
         };
     }
 
@@ -236,7 +261,7 @@ mod w3grs {
         return result;
     }
 
-    fn parse_slot_record(buf: &mut ByteBuffer) {
+    fn parse_slot_record(buf: &mut ByteBuffer) -> SlotRecord {
         let player_id = buf.read_u8().unwrap();
         buf.read_u8().unwrap();
         let status = buf.read_u8().unwrap();
@@ -246,13 +271,20 @@ mod w3grs {
         let race_flag = buf.read_u8().unwrap();
         let ai_strength = buf.read_u8().unwrap();
         let handicap_flag = buf.read_u8().unwrap();
+        return SlotRecord {
+            team_id,
+            player_id,
+            color,
+            race_flag,
+            ai_strength,
+            handicap_flag,
+            status,
+        };
     }
     #[allow(dead_code)]
     pub fn parse(filename: String) -> ParserResult {
         // --snip--
         let start = Instant::now();
-        let args: Vec<String> = env::args().collect();
-
         let mut file = match fs::File::open(filename) {
             Ok(f) => f,
             Err(e) => {
@@ -307,7 +339,9 @@ mod w3grs {
         meta_parser.set_endian(Endian::LittleEndian);
         meta_parser.read_u32().unwrap();
         meta_parser.read_u8().unwrap();
+        let mut player_records: Vec<PlayerRecord> = Vec::new();
         let record = read_playerrecord(&mut meta_parser);
+        player_records.push(record);
         let game_name = read_zero_terminated(&mut meta_parser);
         let private = read_zero_terminated(&mut meta_parser);
         let encoded_mapmeta = read_data_zeroterminated(&mut meta_parser);
@@ -318,29 +352,33 @@ mod w3grs {
         meta_parser.read_u32().unwrap();
         while meta_parser.read_u8().unwrap() == 22 {
             let record = read_playerrecord(&mut meta_parser);
-            println!("{} {}", record.name, record.id);
+            player_records.push(record);
             meta_parser.read_u32().unwrap();
         }
         meta_parser.set_rpos(meta_parser.get_rpos() - 1);
+        let mut reforged_player_records: Vec<ReforgedPlayerRecord> = Vec::new();
         if meta_parser.read_u8().unwrap() != 25 {
             meta_parser.set_rpos(meta_parser.get_rpos() - 1);
-            parse_reforged_metadata(&mut meta_parser);
+            reforged_player_records.append(&mut parse_reforged_metadata(&mut meta_parser));
         }
         meta_parser.set_rpos(meta_parser.get_rpos() + 2);
         let slot_record_count = meta_parser.read_u8().unwrap();
+        let mut slot_records: Vec<SlotRecord> = Vec::new();
         for x in 0..slot_record_count {
-            parse_slot_record(&mut meta_parser);
+            slot_records.push(parse_slot_record(&mut meta_parser));
         }
         let random_seed = meta_parser.read_u32().unwrap();
         meta_parser.read_u8().unwrap();
         let start_spot_count = meta_parser.read_u8().unwrap();
-        println!("{}", start_spot_count);
         let duration = start.elapsed();
         println!("Took {}", duration.as_millis());
         let result = ParserResult {
             header: header,
             subheader: subheader,
             metadata: metadata,
+            slot_records: slot_records,
+            player_records: player_records,
+            reforged_player_records: reforged_player_records,
         };
         return result;
     }
