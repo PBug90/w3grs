@@ -1,5 +1,5 @@
 [package]
-name = "hello_cargo"
+name = "w3grs"
 version = "0.1.0"
 authors = ["anxietypb <anxiety.pb@gmail.com>"]
 edition = "2018"

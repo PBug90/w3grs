@@ -56,14 +56,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hello_cargo"
-version = "0.1.0"
-dependencies = [
- "bytebuffer-rs",
- "flate2",
-]
-
-[[package]]
 name = "libc"
 version = "0.2.76"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -100,3 +92,11 @@ name = "vcpkg"
 version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6454029bf181f092ad1b853286f23e2c507d8e8194d01d92da4a55c274a5508c"
+
+[[package]]
+name = "w3grs"
+version = "0.1.0"
+dependencies = [
+ "bytebuffer-rs",
+ "flate2",
+]

@@ -1,7 +1,10 @@
+mod gamedata;
 mod w3grs {
+    use super::gamedata;
     use bytebuffer::*;
     use flate2::read::ZlibDecoder;
     use std::fs;
+    use std::io::Error;
     use std::io::Read;
     use std::str;
     use std::time::Instant;
@@ -89,7 +92,7 @@ mod w3grs {
         return decoded;
     }
 
-    fn read_zero_terminated(buf: &mut ByteBuffer) -> String {
+    pub fn read_zero_terminated(buf: &mut ByteBuffer) -> String {
         let mut buffer = Vec::new();
         let mut b = buf.read_u8().unwrap();
         while b != 0 {
@@ -281,43 +284,14 @@ mod w3grs {
             status,
         };
     }
+
     #[allow(dead_code)]
-    pub fn parse(filename: String) -> ParserResult {
+    pub fn parse(filename: String) -> Result<ParserResult, Error> {
         // --snip--
         let start = Instant::now();
-        let mut file = match fs::File::open(filename) {
-            Ok(f) => f,
-            Err(e) => {
-                use std::io::ErrorKind::*;
-                println!("Got error: {}", e);
-                match e.kind() {
-                    NotFound => {
-                        println!("File not found");
-                    }
-                    k => {
-                        println!("Error: {:?}", k);
-                    }
-                }
-                panic!("asd");
-            }
-        };
+        let mut file = fs::File::open(filename)?;
         let mut buffer = Vec::new();
-        match file.read_to_end(&mut buffer) {
-            Ok(f) => f,
-            Err(e) => {
-                use std::io::ErrorKind::*;
-                println!("Got error: {}", e);
-                match e.kind() {
-                    NotFound => {
-                        println!("File not found");
-                    }
-                    k => {
-                        println!("Error: {:?}", k);
-                    }
-                }
-                panic!("asd")
-            }
-        };
+        file.read_to_end(&mut buffer)?;
 
         let (nothing, rest) = buffer.split_at(0);
         let mut b = ByteBuffer::from_bytes(rest);
@@ -371,6 +345,9 @@ mod w3grs {
         meta_parser.read_u8().unwrap();
         let start_spot_count = meta_parser.read_u8().unwrap();
         let duration = start.elapsed();
+
+        gamedata::gamedata::parse(&mut meta_parser);
+
         println!("Took {}", duration.as_millis());
         let result = ParserResult {
             header: header,
@@ -380,7 +357,7 @@ mod w3grs {
             player_records: player_records,
             reforged_player_records: reforged_player_records,
         };
-        return result;
+        return Ok(result);
     }
 }
 
@@ -388,12 +365,12 @@ mod w3grs {
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
-
+    use std::io::ErrorKind;
     #[test]
     fn test_reforged1() {
         // This assert would fire and test will fail.
         // Please note, that private functions can be tested too!
-        let p = w3grs::parse(String::from("replays/reforged1.w3g"));
+        let p = w3grs::parse(String::from("replays/reforged1.w3g")).expect("");
         assert_eq!(p.header.header_version, 1);
         assert_eq!(p.subheader.game_identifier, "PX3W");
         assert_eq!(
@@ -403,5 +380,13 @@ mod tests {
         assert_eq!(p.metadata.map_explored, false);
         assert_eq!(p.metadata.random_hero, false);
         assert_eq!(p.metadata.random_races, false);
+    }
+
+    #[test]
+    fn file_not_found_error_propagation() {
+        match w3grs::parse(String::from("replays/404.w3g")) {
+            Err(e) => assert_eq!(e.kind(), ErrorKind::NotFound),
+            Ok(_) => panic!("test should not reach here"),
+        };
     }
 }
