@@ -1,5 +1,5 @@
 pub mod gamedata {
-    use crate::w3grs::read_zero_terminated;
+    use crate::read_zero_terminated;
     use bytebuffer::ByteBuffer;
 
     pub fn parse(buf: &mut ByteBuffer) {
